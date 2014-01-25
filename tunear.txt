@@ -1,0 +1,1316 @@
+################################################################################
+# Uso de Cacti (instalado desde el zip) en Ubuntu para monitorizar el servidor #
+################################################################################
+
+a.- Extract the distribution tarball.    shell> tar xzvf cacti-0.8.7e.tar.gz
+    moverla a su destino en /var/www/luna.colegioapostol.com/web/cacti
+    Create the MySQL database: Mejor desde PHPMyAdmin sino así: shell> mysqladmin --user=root create cacti
+    Import the default cacti database: shell> mysql cacti < /var/www/luna.colegioapostol.com/web/cacti/cacti.sql -p
+    Optional: Create a MySQL username and password for Cacti.
+
+	shell> mysql --user=root mysql -p
+	mysql> GRANT ALL ON cacti.* TO web3_tonisoto@localhost IDENTIFIED BY 'dolo1971';
+	mysql> flush privileges;
+
+	Edit nano -w /var/www/luna.colegioapostol.com/web/cacti/include/config.php and specify the database type, name, host, 
+	user and password for your Cacti configuration.
+
+	$database_type = "mysql";
+	$database_default = "cacti";
+	$database_hostname = "localhost";
+	$database_username = "web3_tonisoto";
+	$database_password = "dolo1971";
+
+	Set the appropriate permissions on cacti's directories for graph/log generation. 
+	You should execute these commands from inside cacti's directory to change the permissions.
+
+	shell> chown -R  web3_tonisoto.web3 /var/www/luna.colegioapostol.com/web/cacti
+	
+	Después nos aseguramos que los directorios /log y /rdd tienen los permisos del usuario de cacti, es decir web3_tonisoto
+	pero como ese usuario ese usuario ya es el dueño del sitio no hace falta. Si no fuese el dueño del sitio lo crearía (si no
+	existe) y me aseguraría que esos dos directorios le corresponde al usuario cacti.
+
+	shell> chown -R  web3_tonisoto.web3 /var/www/luna.colegioapostol.com/web/cacti/log [NO hace falta en nuestro caso]
+	shell> chown -R  web3_tonisoto.web3 /var/www/luna.colegioapostol.com/web/cacti/rra [NO hace falta en nuestro caso]
+
+	Add a line to your 'nano -w /etc/crontab' file similar to:
+
+	*/5 * * * * web3_tonisoto php /var/www/luna.colegioapostol.com/web/cacti/poller.php > /dev/null 2>&1
+
+	Asegurarse de que ese dominio NO tiene activado 'PHPsafe mode' si no no puede acceder a /sbin/rrdtool y otros.
+
+	Point your web browser to:    http://luna.colegioapostol.com/cacti/, Install it and Log in the with a username/password 
+	of admin y despues se cambia a: admin - 'mi clave en GC.tv'
+
+b.- Instalamos las http://code.google.com/p/mysql-cacti-templates/wiki/InstallingTemplates siguiendo instrucciones
+
+	Bajamos la última versión y la descomprimimos /home/tonisoto/descargas/cacti/better-cacti-templates-1.1.7
+
+	Copiamos los scripts a la carpeta de scripts de la instalación de cacti
+
+	cp /home/tonisoto/Descargas/better-cacti-templates-1.1.7/scripts/* /var/www/luna.colegioapostol.com/web/cacti/scripts
+	
+	Editamos nano -w /var/www/luna.colegioapostol.com/web/cacti/scripts/ss_get_mysql_stats.php y ponemos los datos necesarios:
+
+	$mysql_user = 'web3_tonisoto';
+	$mysql_pass = 'dolo1971';
+
+	Now import the template files through your web browser. In the Cacti web interface's Console tab, click on the Import Templates
+	link in the left sidebar. Browse to the directory containing the unpacked templates, select the XML file for the templates 
+	you're installing, and submit the form. Lo hice sin problemas.
+
+	memory_limit = 16M      ; Maximum amount of memory a script may consume (16MB)  ---> tuve que pasrlo a 128MB
+	root@luna:/var/www/luna.colegioapostol.com/web/cacti# nano -w /etc/php5/apache2/php.ini
+	root@luna:/var/www/luna.colegioapostol.com/web/cacti# nano -w /etc/php5/cli/php.ini
+	root@luna:/var/www/luna.colegioapostol.com/web/cacti# nano -w /root/ispconfig/php/php.ini
+	/etc/init.d/apache2 restart
+
+	Algunas templates necesitan que usar el /scripts/ssh_get_by_ssh.php y, si se van a utilizar para acceder a otro servidor es
+	necesario configurar un 'Creating an SSH Key Pair' para el usuario de cacti y luego 'Installing the Public Key' para que
+	pueda acceder directamente al sistema sin pedir usuario y contraseña. toda la exolicación sobre esto está aquí:
+
+		http://code.google.com/p/mysql-cacti-templates/wiki/SSHBasedTemplates
+
+	Pero, como yo no voy a acceder (por ahora) a otra máquina entonces puedo saltarme ese paso (aunque en este caso sería
+	recomendable crear un usuario distinto de 'tonisoto', quizás 'cactimot' o algo así para no interferir con los SSH key pair).
+	Lo único que hice fué:
+
+		nano -w /var/www/luna.colegioapostol.com/web/cacti/scripts/ss_get_by_ssh.php   ... y puse:
+
+	$ssh_user   = 'web3_tonisoto';                          # SSH username
+	$ssh_port   = 22;                               # SSH port
+	$ssh_iden   = '-i /var/www/cacti/.ssh/id_rsa';  # SSH identity
+	$ssh_tout   = 10;                               # SSH connect timeout
+	$cache_dir  = '/tmp';  # If set, this uses caching to avoid multiple calls.
+	$poll_time  = 300; # Adjust to match your polling interval.
+	$use_ss     = FALSE; # Whether to use the script server or not
+	$use_ssh    = FALSE;  # Whether to connect via SSH or not (default yes).
+	$debug      = FALSE; # Define whether you want debugging behavior.
+	$debug_log  = FALSE; # If $debug_log is a filename, it'll be used.
+
+	# Parameters for specific graphs can be specified here, or in the .cnf file.
+	$status_server = 'localhost';             # Which server to query
+	$status_url    = '/server-status';        # Where Apache status lives
+	$http_user     = '';
+	$http_pass     = '';
+	$memcache_port = 11211;                   # Which port memcached listens on
+	$redis_port    = 6379;                    # Which port redis listens on
+                                          # How to get openvz stats
+	$openvz_cmd    = 'cat /proc/user_beancounters';
+
+	[Fijarse que el $ssh_iden NO ha sido necesario por que el $use_ssh    = FALSE; lo cambie de TRUE a FALSE.]
+
+	Podemos probar que el poller.php extrae sin errores todo lo necesario ejecutándolo con el usuario de web3_tonisoto así:
+
+	Asegurémonos que los permisos están bien: shell> chown -R  web3_tonisoto.web3 /var/www/luna.colegioapostol.com/web/cacti ... y
+
+	su - web3_tonisoto -c 'env -i   /usr/bin/php -q  /var/www/luna.colegioapostol.com/web/cacti/poller.php' [Fijarse en la salida]
+
+
+
+c.- En el panel de Cacti y una vez cargadas las templates vamos a Devices --> En 'Type' seleccionamos p. ej. 'X MySQL server HT' y le
+    damos a 'Add'. Luego le ponemos un nombre p. ej. 'MySQL_inno_DB' y en host 'localhost' (es extraño que poniendo
+    'luna.colegioapostol.com' no funcionó), luego le damos a 'Create'.
+    A continuación le damos a 'Create Graphs for this Host' y escogemos los gráficos (innoDB) que queremos meter. Luego 'Create' y
+    otra vez 'Create'.
+
+    Ahora vamos a 'Graph tree' y pulsamos en 'Luna', luego a 'Add', luego en 'Tree item type' escogemos 'Host', así nos aparecerá
+    más abajo en Host el 'MySQL_inno_DB' recién creado. Lo selecionamos y le damos a 'Create', luego 'Save' y ya está: lo tenemos en
+    los gráficos.
+
+#################################
+# d.- Instalar clamav y clamdav #
+#################################
+apt-get -y install clamav clamav-daemon freshinstall (freshclam)
+
+La ruta para el ejecutable que pondremos en Moodle 1.9, 2.2.2 y 2.3.2 y Mahara es:
+/usr/bin/clamscan
+Creo un directorio de quarentena en:
+/quarentena con permisos 777
+
+Se ejecuta así desde la consola:
+sudo  -u www-data /usr/bin/clamscan -v -r /var/www/web6/maharadata
+
+Se prueba con un fichero que contenga esta línea:
+X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*
+
+Esto posiblemente me convierta en infectado este fichero tunear.txt ;-((
+
+Comprobé a subirlo y funciona! lo detecta como infectado!
+
+¡ comprobar si freshclam actualiza la base de datos de virus por sí mismo o hay que actualizarlo o meterlo en un cron !
+
+##############################################################################
+# e.- Monitorear la red con mtr y el server con top, mtop, vmstat, iostat,.. #
+##############################################################################
+golgito:/home/tonisoto# mtr --report secundaria.colegioapostol.com
+root@luna:/home/tonisoto# mtr --report debian.galiciacity.com
+
+Monitorizar el server con vmstat, iostat y otros: 
+http://www.thegeekstuff.com/2011/07/iostat-vmstat-mpstat-examples/
+http://library.linode.com/linux-tools/common-commands/vmstat
+Top con M (ordena por uso de memoria) y con P (por uso de CPU), con c (toggle de comando a su ruta) y con 1 (toggle 1 o 2 CPU(s))
+
+Pedir reports con esto: 
+root@luna:/home/tonisoto# mysqlreport --user root --password xxxxxx (interpretación aquí: http://hackmysql.com/mysqlreportguide)
+root@luna:/home/tonisoto# innotop -u root -p xxxxx -d 3
+root@luna:/home/tonisoto# mytop -u root -p txxxx
+root@luna:/home/tonisoto# mysqltop -u root -p xxx -d 3
+root@luna:/home/tonisoto# mtop
+root@luna:/home/tonisoto# htop
+root@luna:/home/tonisoto# dstat
+
+root@luna:/home/tonisoto# watch mpstat
+root@luna:/home/tonisoto# watch iostat
+
+sysbench --test=cpu --cpu-max-prime=20000 run (No lo probé! Cuidado!)
+root@debian:/# watch 'mysqladmin -u root -pcontraseñasinespacios  status'
+
+###################################
+# f.- Benchmarking Apache y MySQL #
+###################################
+Benchmarking Apache:
+ab -c40 -n80 http://secundaria.colexioapostol.com/ (Haz 80 requests, 40 at a time). 40 concurrentes + 40 concurentes = 80 peticiones
+
+Benchmarking MySQL: (http://www.techrepublic.com/blog/howdoi/how-do-i-stress-test-mysql-with-mysqlslap/133)
+root@luna:/home/tonisoto# /usr/bin/mysqlslap  --user=root -p --auto-generate-sql --concurrency=300  --iterations=10 -vv
+root@luna:/home/tonisoto# /usr/bin/mysqlslap  --user=root -p --auto-generate-sql --concurrency=100  --number-of-queries=10000 -vv (100 clients 
+running 100 queries per client)
+root@luna:/home/tonisoto# /usr/bin/mysqlslap  --user=root -p --auto-generate-sql --concurrency=100 --number-of-queries=1000 --number-char-cols=4 --number-int-cols=7 -vv 
+root@luna:/home/tonisoto# /usr/bin/mysqlslap  --user=root -p --auto-generate-sql --concurrency=100 --number-of-queries=700 --engine=innodb -vv 
+root@luna:/home/tonisoto# /usr/bin/mysqlslap  --user=root -p --auto-generate-sql --concurrency=100 --number-of-queries=700 --engine=myisam -vv 
+root@luna:/home/tonisoto# /usr/bin/mysqlslap  --user=root -p --auto-generate-sql --concurrency=100 --number-of-queries=700 --engine=memory -vv 
+
+##############################################################################
+# g.- Monitorear el servicio de mensajería interna de Moodle ,.............. #
+##############################################################################
+root@luna:/var/log# tail -f /var/log/apache2/other_vhosts_access.log | fgrep 'message'
+root@luna:/var/log# grep -i 'GET /message/' /var/log/apache2/other_vhosts_access.log
+root@luna:/var/log# grep -i 'GET /message/index.php?user1' /var/log/apache2/other_vhosts_access.log
+cat /var/log/apache2/other_vhosts_access.log | cut -d ' ' --fields=1,2,3,4,5,6,7,8,9,10 | grep -i 'GET /message/index.php?user1'
+
+
+##############################################################
+# h.- Tunear Apache2 en Luna según diversas recomendaciones  #
+##############################################################
+.. Este es mi Apache:
+
+root@luna:/var/log# apache2 -V
+Server version: Apache/2.2.14 (Ubuntu)
+Server built:   Jul 12 2013 13:39:34
+Server's Module Magic Number: 20051115:23
+Server loaded:  APR 1.3.8, APR-Util 1.3.9
+Compiled using: APR 1.3.8, APR-Util 1.3.9
+Architecture:   64-bit
+Server MPM:     Prefork
+  threaded:     no
+    forked:     yes (variable process count)
+Server compiled with....
+ -D APACHE_MPM_DIR="server/mpm/prefork"
+ -D APR_HAS_SENDFILE
+ -D APR_HAS_MMAP
+ -D APR_HAVE_IPV6 (IPv4-mapped addresses enabled)
+ -D APR_USE_SYSVSEM_SERIALIZE
+ -D APR_USE_PTHREAD_SERIALIZE
+ -D SINGLE_LISTEN_UNSERIALIZED_ACCEPT
+ -D APR_HAS_OTHER_CHILD
+ -D AP_HAVE_RELIABLE_PIPED_LOGS
+ -D DYNAMIC_MODULE_LIMIT=128
+ -D HTTPD_ROOT=""
+ -D SUEXEC_BIN="/usr/lib/apache2/suexec"
+ -D DEFAULT_PIDLOG="/var/run/apache2.pid"
+ -D DEFAULT_SCOREBOARD="logs/apache_runtime_status"
+ -D DEFAULT_LOCKFILE="/var/run/apache2/accept.lock"
+ -D DEFAULT_ERRORLOG="logs/error_log"
+ -D AP_TYPES_CONFIG_FILE="/etc/apache2/mime.types"
+ -D SERVER_CONFIG_FILE="/etc/apache2/apache2.conf"
+-----------------------------------------------------
+
+
+
+Veamos cómo funciona:
+
+* How to get the threads per process: 
+# ps -uwww-data -opid,ppid,nlwp 
+PID PPID NLWP 
+10622 10604 27 
+10654 10604 27 
+
+* How to get the total thread counts: 
+# ps -u www-data -Lf | wc -l
+ 55 
+
+#ps -ylC apache2 --sort:rss
+
+root@luna:/home/tonisoto# watch ps -o pid,tt,user,fname,rss,wchan -C apache2 --sort:wchan  <- Buscar 'flock_lock_file_wait' e investigarlos con:
+root@luna:/home/tonisoto# lsof -p pid  <- leer más http://www.netadmintools.com/html/lsof.man.html (go to OUTPUT then look at FD for NnRrWwUuXx meanings, different types of locks)
+
+#####################################################################
+# Datos de configuración que voy a cambiar para tuneo:              #
+# La configuración está en: nano -w  /etc/apache2/apache2.conf      #
+# Vigilar si no se pega con ISPConfig2: /etc/init.d/apache2 restart #
+#####################################################################
+#
+# Timeout: The number of seconds before receives and sends time out.
+#
+Timeout 300 				<--------------------------------- Lo bajamos del inicial 300 a ... 150 y seguiremos hasta 60 s?
+					TUNEO: 7 Noviembre de 2013 22:54 h: Lo bajo a 150 s
+
+#
+# KeepAlive: Whether or not to allow persistent connections (more than
+# one request per connection). Set to "Off" to deactivate.
+#
+KeepAlive On
+
+#
+# MaxKeepAliveRequests: The maximum number of requests to allow
+# during a persistent connection. Set to 0 to allow an unlimited amount.
+# We recommend you leave this number high, for maximum performance.
+#
+MaxKeepAliveRequests 100
+
+#
+# KeepAliveTimeout: Number of seconds to wait for the next request from the
+# same client on the same connection.
+#
+KeepAliveTimeout 15 			<-------------------------------- Lo bajamos a 10 s? Mooodle aconseja a 5 ó 2 s
+					TUNEO: 7 Noviembre de 2013 22:54 h: Lo bajo del inicial 15s a 10s (El apache2 de tierra venía ya con 5 s)
+##
+## Server-Pool Size Regulation (MPM specific)
+## 
+
+# prefork MPM
+# StartServers: number of server processes to start
+# MinSpareServers: minimum number of server processes which are kept spare
+# MaxSpareServers: maximum number of server processes which are kept spare
+# MaxClients: maximum number of server processes allowed to start
+# MaxRequestsPerChild: maximum number of requests a server process serves
+<IfModule mpm_prefork_module>
+    StartServers          5
+    MinSpareServers       5
+    MaxSpareServers      15 <-- El apache de tierra se instaló con 10
+    MaxClients          150
+    MaxRequestsPerChild   0
+</IfModule>
+# worker MPM
+# StartServers: initial number of server processes to start
+# MaxClients: maximum number of simultaneous client connections
+# MinSpareThreads: minimum number of worker threads which are kept spare
+# MaxSpareThreads: maximum number of worker threads which are kept spare
+# ThreadsPerChild: constant number of worker threads in each server process
+# MaxRequestsPerChild: maximum number of requests a server process serves
+<IfModule mpm_worker_module>
+    StartServers          2
+    MinSpareThreads      25
+    MaxSpareThreads      75 
+    ThreadLimit          64
+    ThreadsPerChild      25
+    MaxClients          150
+    MaxRequestsPerChild   0
+</IfModule>
+
+# event MPM
+# StartServers: initial number of server processes to start
+# MaxClients: maximum number of simultaneous client connections
+# MinSpareThreads: minimum number of worker threads which are kept spare
+# MaxSpareThreads: maximum number of worker threads which are kept spare
+# ThreadsPerChild: constant number of worker threads in each server process
+# MaxRequestsPerChild: maximum number of requests a server process serves
+<IfModule mpm_event_module>
+    StartServers          2
+    MaxClients          150
+    MinSpareThreads      25
+    MaxSpareThreads      75 
+    ThreadLimit          64
+    ThreadsPerChild      25
+    MaxRequestsPerChild   0
+</IfModule>
+
+---------------------------------------------------
+
+
+##############################################################
+# i.- Tunear MySQL a partir de las sugerencias de mysqltuner #
+##############################################################
+
+Lecturas recomendadas:
+http://www.mysqlperformanceblog.com/2007/11/01/innodb-performance-optimization-basics/
+http://www.mysqlperformanceblog.com/2013/09/20/innodb-performance-optimization-basics-updated/
+http://www.mysqlperformanceblog.com/2013/12/07/linux-performance-tuning-tips-mysql/
+
+Calculadora de configuraciones pra MySQL: http://www.mysqlcalculator.com/
+
+mysqlcheck -u root -p --auto-repair --check --optimize --all-databases
+
+
+root@luna:/home/tonisoto# service mysql stop  <-- Primero parar MySQL
+root@luna:/home/tonisoto# myisamchk -a -S  /var/lib/mysql/moodle/*.MYI <-- No vale para innoDB
+root@luna:/home/tonisoto# service mysql start <-- Lanzar MySQL
+
+Para innoDB (Mantenimiento en Moodle):
+root@luna:/var/log# mysqldump -u root -p -C -Q -e -a moodle23 > /home/tonisoto/Backup_Moodle/BD_moodle23_secundaria_2_4_6_backup_2013_11_03.sql
+root@luna:/var/log# mysqlcheck -u root -p -c --databases moodle23 <-- Check database
+root@luna:/var/log# mysqlcheck -u root -p -o --databases moodle23 <-- Optimize database
+root@luna:/var/log# mysqlcheck -u root -p -a --databases moodle23 <-- Analyze database
+
+root@luna:/home/tonisoto/scripts# 
+/home/tonisoto/scripts/tuning-primer.sh
+
+
+root@luna:/usr/bin# mysqltuner (por defecto Ubuntu me instaló una versión más antigua pero yo baje el
+último script 1.2.0 y se lo copié al ejecutable)
+root@luna:/home/tonisoto# mysqltuner
+
+ >>  MySQLTuner 1.2.0 - Major Hayden <major@mhtx.net>
+ >>  Bug reports, feature requests, and downloads at http://mysqltuner.com/
+ >>  Run with '--help' for additional options and output filtering
+[OK] Logged in using credentials from debian maintenance account.
+
+-------- General Statistics --------------------------------------------------
+[--] Skipped version check for MySQLTuner script
+[OK] Currently running supported MySQL version 5.1.63-0ubuntu0.10.04.1
+[OK] Operating on 64-bit architecture
+
+-------- Storage Engine Statistics -------------------------------------------
+[--] Status: +Archive -BDB -Federated +InnoDB -ISAM -NDBCluster 
+[--] Data in MyISAM tables: 261M (Tables: 790)
+[--] Data in InnoDB tables: 562M (Tables: 1019)
+[!!] Total fragmented tables: 1045
+
+-------- Security Recommendations  -------------------------------------------
+[OK] All database users have passwords assigned
+
+-------- Performance Metrics -------------------------------------------------
+[--] Up for: 10d 9h 9m 8s (13M q [15.279 qps], 318K conn, TX: 20B, RX: 3B)
+[--] Reads / Writes: 74% / 26%
+[--] Total buffers: 1004.0M global + 2.8M per thread (151 max threads)
+[OK] Maximum possible memory usage: 1.4G (17% of installed RAM)
+[OK] Slow queries: 0% (63/13M)
+[!!] Highest connection usage: 99%  (150/151)
+[OK] Key buffer size / total MyISAM indexes: 512.0M/107.5M
+[OK] Key buffer hit rate: 99.9% (92M cached / 97K reads)
+[OK] Query cache efficiency: 53.9% (5M cached / 11M selects)
+[!!] Query cache prunes per day: 251341
+[OK] Sorts requiring temporary tables: 0% (451 temp sorts / 520K sorts)
+[!!] Temporary tables created on disk: 40% (254K on disk / 636K total)
+[OK] Thread cache hit rate: 99% (930 created / 318K connections)
+[!!] Table cache hit rate: 1% (2K open / 175K opened)
+[OK] Open file limit used: 26% (1K/6K)
+[OK] Table locks acquired immediately: 99% (5M immediate / 5M locks)
+[!!] InnoDB data size / buffer pool: 562.8M/326.0M
+
+
+
+-------- Recommendations -----------------------------------------------------
+General recommendations:
+    Run OPTIMIZE TABLE to defragment tables for better performance
+    Enable the slow query log to troubleshoot bad queries
+    Reduce or eliminate persistent connections to reduce connection usage
+    When making adjustments, make tmp_table_size/max_heap_table_size equal
+    Reduce your SELECT DISTINCT queries without LIMIT clauses
+    Increase table_cache gradually to avoid file descriptor limits
+
+Variables to adjust:
+    max_connections (> 151)
+    wait_timeout (< 28800)
+    interactive_timeout (< 28800)
+    query_cache_size (> 36M)
+    tmp_table_size (> 128M)
+    max_heap_table_size (> 128M)
+    table_cache (> 3072)
+    innodb_buffer_pool_size (>= 562M)
+
+
+
+Variables to adjust:
+    query_cache_size (> 36M) ----> Pasé de 36M a 48M
+    join_buffer_size (> 128.0K, or always use indexes with joins) ----> Pasé de 131,072 a 256K (si vuelve a aparecer) y llegar hasta 3M
+    tmp_table_size (> 128M)---> pasar a 94, 128 o incluso 256! <------ Hecho a 128 a 256
+    max_heap_table_size (> 128M) ---> pasar a 94, 128 o incluso 256! <------ Hecho a 128 a 256
+    table_cache (> 3072)
+    innodb_buffer_pool_size (>= 340M) <------ Hecho de 275 a 326 a 562M --> 
+
+WORKER THREADS
+Current thread_cache_size = 8
+Current threads_cached = 4
+Current threads_per_sec = 0
+Historic threads_per_sec = 0
+Your thread_cache_size is fine
+
+MAX CONNECTIONS
+Current max_connections = 151
+Current threads_connected = 17
+Historic max_used_connections = 70
+The number of used connections is 46% of the configured maximum.
+Your max_connections variable seems to be fine.
+
+
+INNODB STATUS
+Current InnoDB index space = 155 M
+Current InnoDB data space = 340 M
+Current InnoDB buffer pool free = 0 %
+Current innodb_buffer_pool_size = 326 M
+Depending on how much space your innodb indexes take up it may be safe
+to increase this value to up to 2 / 3 of total system memory
+
+MEMORY USAGE
+Max Memory Ever Allocated : 1021 M
+Configured Max Per-thread Buffers : 424 M
+Configured Max Global Buffers : 825 M
+Configured Max Memory Limit : 1.22 G
+Physical Memory : 7.81 G
+Max memory limit seem to be within acceptable norms
+
+KEY BUFFER
+Current MyISAM index space = 174 M
+Current key_buffer_size = 512 M
+Key cache miss rate is 1 : 280
+Key buffer free ratio = 80 %
+Your key_buffer_size seems to be fine
+
+QUERY CACHE
+Query cache is enabled
+Current query_cache_size = 36 M
+Current query_cache_used = 23 M
+Current query_cache_limit = 4 M
+Current Query cache Memory fill ratio = 64.06 %
+Current query_cache_min_res_unit = 4 K
+Query Cache is 22 % fragmented
+Run "FLUSH QUERY CACHE" periodically to defragment the query cache memory
+If you have many small queries lower 'query_cache_min_res_unit' to reduce fragmentation. <-- Qué hago con esto?
+MySQL won't cache query results that are larger than query_cache_limit in size
+
+
+SORT OPERATIONS
+Current sort_buffer_size = 2 M
+Current read_rnd_buffer_size = 256 K
+Sort buffer seems to be fine
+
+JOINS
+Current join_buffer_size = 260.00 K
+You have had 1902 queries where a join could not use an index properly
+You should enable "log-queries-not-using-indexes"
+Then look for non indexed joins in the slow query log.
+If you are unable to optimize your queries you may want to increase your
+join_buffer_size to accommodate larger joins in one pass.
+
+Note! This script will still suggest raising the join_buffer_size when
+ANY joins not using indexes are found.
+
+OPEN FILES LIMIT
+Current open_files_limit = 6305 files
+The open_files_limit should typically be set to at least 2x-3x
+that of table_cache if you have heavy MyISAM usage.
+Your open_files_limit value seems to be fine
+
+TABLE CACHE
+Current table_open_cache = 3072 tables
+Current table_definition_cache = 768 tables  ---> Le aumenté de 512 a 640 y a 768
+You have a total of 1832 tables
+You have 2426 open tables.
+The table_cache value seems to be fine
+You should probably increase your table_definition_cache value.
+
+
+TEMP TABLES
+Current max_heap_table_size = 128 M
+Current tmp_table_size = 128 M
+Of 220889 temp tables, 38% were created on disk
+Perhaps you should increase your tmp_table_size and/or max_heap_table_size
+to reduce the number of disk-based temporary tables
+Note! BLOB and TEXT columns are not allow in memory tables.
+If you are using these columns raising these values might not impact your
+ratio of on disk temp tables.
+
+
+##########################################################################################
+** Modificaciones realizadas (20-mayo-2012) ¿ó 2013?****
+Abro el archivo de configuración de MySQL:  nano -w /etc/mysql/my.cnf
+Modifico lo siguiente:
+key_buffer              = 16M   lo cambio a 512M
+query_cache_limit       = 1M	lo cambio a 4M
+query_cache_size        = 16M	lo cambio a 36M
+	Añadí esta línea que No existía:
+join_buffer_size=256K
+
+[isamchk]
+key_buffer              = 16M	lo cambio a 32M --> 512M [Parece que se puede 32M por cada Gb de RAM]
+	#table_cache            = 64	descomento la línea y pongo 3072 (Será mucho?)
+table_cache            = 3072
+	Este valor de table_definition_cache que aparecía por defecto: table_definition_cache 256 en phpMyAdmin lo introduje en my.cnf cambiándolo a
+	512 a sugerencia de /home/tonisoto/scripts/tuning-primer.sh:
+table_definition_cache  = 768
+	Añadí esta línea que No existía:
+innodb_buffer_pool_size = 326M --> 562M
+	Este valor de tmp_table_size que aparecía por defecto: tmp_table_size	16777216 (16M) en phpMyAdmin lo introduje en my.cnf cambiándolo a:
+tmp_table_size	= 128M
+	Este valor de max_heap_table_size que aparecía por defecto: max_heap_table_size=16M  en phpMyAdmin lo introduje en my.cnf cambiándolo a:
+max_heap_table_size = 128M
+
+***Descomento por un rato estas líneas para log slow_querie (al final las comento otra vez)***
+# Here you can see queries with especially long duration
+#log_slow_queries       = /var/log/mysql/mysql-slow.log
+#long_query_time = 3
+#log-queries-not-using-indexes
+
+	---> Leo así la salida: tail -f /var/log/mysql/mysql-slow.log
+
+root@luna:/home/tonisoto# service mysql restart
+
+
+
+##########################################################################################
+** Modificaciones realizadas (12-septiembre-2013)****
+Abro el archivo de configuración de MySQL:  nano -w /etc/mysql/my.cnf
+Lo anterior sigue igual. Sólo hablaré de las modificaciones que hago basándome en este report:
+
+[!!] InnoDB data size / buffer pool: 891.2M/562.0M
+
+-------- Recommendations -----------------------------------------------------
+General recommendations:
+    Run OPTIMIZE TABLE to defragment tables for better performance
+    MySQL started within last 24 hours - recommendations may be inaccurate
+    Enable the slow query log to troubleshoot bad queries
+    Adjust your join queries to always utilize indexes
+Variables to adjust:
+    query_cache_size (> 48M)
+    join_buffer_size (> 256.0K, or always use indexes with joins)
+    innodb_buffer_pool_size (>= 891M)
+
+Modifico lo siguiente:
+query_cache_size        = 16M	lo cambio a 36M y a -->  48M y a -->  60M
+
+[isamchk]
+innodb_buffer_pool_size = 326M --> 562M  --> 900MB (leer recomendación basada en una consulta SQL que me saldría: 1279M)
+
+***Descomento por un rato estas líneas para log slow_querie (al final las comento otra vez)***
+# Here you can see queries with especially long duration
+#log_slow_queries       = /var/log/mysql/mysql-slow.log
+#long_query_time = 3
+#log-queries-not-using-indexes
+
+	---> Leo así la salida: tail -f /var/log/mysql/mysql-slow.log
+
+root@luna:/home/tonisoto# service mysql restart
+
+##########################################################################################
+** Modificaciones realizadas (26-octubre-2013) y 27-Octubre-2013 (12:50h) ****
+Abro el archivo de configuración de MySQL:  nano -w /etc/mysql/my.cnf
+Lo anterior sigue igual. Sólo hablaré de las modificaciones que hago basándome en este report:
+
+[!!] InnoDB data size / buffer pool: 954.7M/900.0M <--- Subiré esto a 1000M
+
+-------- Recommendations -----------------------------------------------------
+General recommendations:
+    Run OPTIMIZE TABLE to defragment tables for better performance
+    Enable the slow query log to troubleshoot bad queries
+    Reduce or eliminate persistent connections to reduce connection usage
+    Adjust your join queries to always utilize indexes
+    Increase table_cache gradually to avoid file descriptor limits
+Variables to adjust:
+    max_connections (> 151)
+    wait_timeout (< 28800)
+    interactive_timeout (< 28800)
+    query_cache_size (> 60M) <--- subiré a 96MB
+    join_buffer_size (> 256.0K, or always use indexes with joins) <-- Subiré a 512K
+    table_cache (> 3072)
+    innodb_buffer_pool_size (>= 954M)  <--- Subiré esto a 1000M
+
+Bajo key_buffer de 512 a 384M
+key_buffer = 384M [Me baso en que cacti me indica que NUNCA se pasa de 256M como máximo así que rebajo de 512M a 384M]
+
+Subo (poco a poco) a 96 MB:
+query_cache_size        = 16M	lo cambio a 36M y a -->  48M y a -->  60M --> 96 MB [En teoría puedo poner 64M por cada Gb de RAM --> 512M]
+
+Subo a 512K :
+join_buffer_size=512K  Lo cambio de 256K --> 512K [Es doblar pero tiene poco efecto global sobre el consumo de memoria seguna la calculadora: http://www.mysqlcalculator.com/]
+
+Subo a 1000M este:
+[isamchk]
+innodb_buffer_pool_size = 326M --> 562M  --> 900MB --> 1000M (leer recomendación basada en una consulta SQL (ver + abajo) que me saldría: 1279M -> 1453M)
+
+***Descomento por un rato estas líneas para log slow_querie (al final las comento otra vez)***
+# Here you can see queries with especially long duration
+#log_slow_queries       = /var/log/mysql/mysql-slow.log
+#long_query_time = 3
+#log-queries-not-using-indexes
+
+	---> Leo así la salida: tail -f /var/log/mysql/mysql-slow.log
+
+nano -w /etc/mysql/my.cnf
+root@luna:/home/tonisoto# service mysql restart
+
+
+####################################################################
+** Test ejecutados y modificaciones realizadas 7-dic-2013 (34d)****
+####################################################################
+MySQL Version 5.1.72-0ubuntu0.10.04.1 x86_64
+Uptime = 34 days 1 hrs 38 min 37 sec
+Avg. qps = 18
+Total Questions = 55050927
+Threads Connected = 16
+
+root@luna:/var/log# /home/tonisoto/scripts/tuning-primer.sh
+Reporta esto (solo report de mejora):
+
+INNODB STATUS
+Current InnoDB index space = 538 M
+Current InnoDB data space = 1006 M
+Current InnoDB buffer pool free = 0 %	<------------------------------------------------- Entendido! Se valorará
+Current innodb_buffer_pool_size = 1000 M
+Depending on how much space your innodb indexes take up it may be safe
+to increase this value to up to 2 / 3 of total system memory
+
+
+TABLE CACHE
+Current table_open_cache = 3072 tables
+Current table_definition_cache = 768 tables
+You have a total of 1377 tables
+You have 2103 open tables.
+The table_cache value seems to be fine
+You should probably increase your table_definition_cache value. <----------------------- Esto no se dónde está
+
+
+
+root@luna:/var/log#  mysqltuner reporta esto:
+
+-------- Storage Engine Statistics -------------------------------------------
+[--] Status: +Archive -BDB -Federated +InnoDB -ISAM -NDBCluster 
+[--] Data in MyISAM tables: 278M (Tables: 586)
+[--] Data in InnoDB tables: 1006M (Tables: 768)
+[!!] Total fragmented tables: 792
+
+-------- Performance Metrics -------------------------------------------------
+[--] Up for: 34d 1h 42m 54s (55M q [18.701 qps], 1M conn, TX: 115B, RX: 9B)
+[--] Reads / Writes: 74% / 26%
+[--] Total buffers: 1.7G global + 3.1M per thread (151 max threads)
+[OK] Maximum possible memory usage: 2.1G (27% of installed RAM)
+[OK] Slow queries: 0% (7/55M)
+[OK] Highest usage of available connections: 45% (68/151)
+[OK] Key buffer size / total MyISAM indexes: 384.0M/130.1M
+[OK] Key buffer hit rate: 100.0% (142M cached / 33K reads)
+[OK] Query cache efficiency: 57.8% (25M cached / 44M selects)
+[!!] Query cache prunes per day: 223847
+[OK] Sorts requiring temporary tables: 0% (2K temp sorts / 888K sorts)
+[!!] Joins performed without indexes: 75583
+[OK] Temporary tables created on disk: 12% (235K on disk / 1M total)
+[OK] Thread cache hit rate: 99% (11K created / 1M connections)
+[!!] Table cache hit rate: 2% (2K open / 80K opened)
+[OK] Open file limit used: 20% (1K/6K)
+[OK] Table locks acquired immediately: 99% (23M immediate / 23M locks)
+[!!] InnoDB data size / buffer pool: 1006.3M/1000.0M
+
+-------- Recommendations -----------------------------------------------------
+General recommendations:
+    Run OPTIMIZE TABLE to defragment tables for better performance
+    Enable the slow query log to troubleshoot bad queries
+    Adjust your join queries to always utilize indexes
+    Increase table_cache gradually to avoid file descriptor limits
+Variables to adjust:
+    query_cache_size (> 96M) <--------------------------------------------------------------- 7 dic 2013 --> Apuntaría a subirlo pero .. aún NO
+    join_buffer_size (> 512.0K, or always use indexes with joins) <--------------------------
+    table_cache (> 3072) <------------------------------------------------------------------- 7 dic 2013 --> Apuntaría a subirlo pero .. No hay acuerdo
+    innodb_buffer_pool_size (>= 1006M) <---------------------------------------------------- 7 dic 2013 --> Apuntaría a subirlo un poco pero .. aún NO
+
+
+
+**************************************************************************************************************************************************
+A VIGILAR / Valorar
+Vigilar con: root@luna:/home/tonisoto# mysqlreport --user root --password xxxxxx (interpretación aquí: http://hackmysql.com/mysqlreportguide)
+ Las líneas 5 preimeras líneas
+Buffer used    23.40M of 384.00M  %Used:   6.09  	<-- Debería quedar por debajo del 80% -> Queda 3 veces
+  Current      95.12M            %Usage:  24.77
+Write hit      92.34%
+Read hit       99.98% <-- debería estar próximo al 99% --> Lo está 3 veces
+
+
+
+__ Table Locks _________________________________________________________
+Waited          1.39k     0.0/s  %Total:   0.01		<--- Cómo evoluciona esto? Está por debajo del 10%? Sí 3 veces. En cacti se observa mejora anual
+Immediate      23.97M     8.1/s
+
+__ Tables ______________________________________________________________
+Open             2103 of 3072    %Cache:  68.46 	<--- Cómo evoluciona esto? Se llena? Tierra: 45.80
+Opened         80.07k     0.0/s				<--- Cómo evoluciona? [Al restart en 1.7/s y luego 0.2/s] -> Tierra: 3.25M     6.3/s
+
+
+¿Podría haber mejora en el siguiente si no usase tanto Disk? --> investigar
+__ Created Temp ________________________________________________________
+Disk table    235.12k     0.1/s				<--- Cómo evoluciona esto? Este valor debería ser el MENOR de los tres
+Table           1.57M     0.5/s    Size: 256.0M		<--- Cómo evoluciona esto? Supera el temp_table_size?
+File            4.34k     0.0/s
+.. en tierra muestra esto (14 enero 2014):
+Disk table     57.56k     0.1/s
+Table         252.70k     0.5/s    Size: 256.0M
+File              550     0.0/s
+
+
+__ Threads _____________________________________________________________
+Running             1 of   13
+Cached              5 of    8      %Hit:  99.34	-> (99)	<--- Cómo evoluciona esto? Si baja % malo --> Aumentar thread_cache_size (8)
+Created        11.13k     0.0/s
+Slow                0       0/s
+
+.. en tierra muestra esto (14 enero 2014):
+__ Threads _____________________________________________________________
+Running             1 of    3
+Cached              7 of    8      %Hit:  98.20
+Created         1.81k     0.0/s
+Slow                0       0/s
+
+
+
+7 dic 2013 ¿Subimos el InnoDB Buffer Pool size o no nos preocupamops ya que debe ser causado sólo por los backups?
+__ InnoDB Buffer Pool __________________________________________________
+Usage         999.98M of 1000.00  %Used: 100.00		<-- evitaremos que alcance el 100%: Lo alcanzó tras 34 días! 
+Read hit      100.00%
+Pages
+  Free              1            %Total:   0.00
+  Data         61.04k                     95.37 %Drty:   0.00
+  Misc           2961                      4.63
+  Latched           0                      0.00
+Reads           1.58G   536.3/s
+  From file    76.10k     0.0/s            0.00
+  Ahead Rnd      1374     0.0/s
+  Ahead Sql       628     0.0/s
+Writes         38.96M    13.2/s
+Flushes         2.55M     0.9/s
+Wait Free           0       0/s
+
+
+
+__ InnoDB Lock _________________________________________________________
+Waits            1227     0.0/s				<-- Que se mantenga en cero waits en 0 es lo mejor... pero si hay filas bloquedas ver...
+Current             0
+Time acquiring
+  Total         14180 ms -> 29031 ms (34 días)		<-- Cuanto tiempo están bloquedas, media y tiempo máximo en bloqueo
+  Average          95 ms -> 23 ms  (34 días)
+  Max            6037 ms -> 584 ms (34 días)
+
+
+
+****************************************** RESULTADOS EN TIERRA *********************************************************************************
+A VIGILAR / Valorar
+Vigilar con: root@tierra:/home/tonisoto# mysqlreport --user root --password xxxxxx (interpretación aquí: http://hackmysql.com/mysqlreportguide)
+ Las líneas 5 preimeras líneas
+Use of uninitialized value in formline at /usr/bin/mysqlreport line 1238.
+MySQL 5.5.33-0+wheezy1-  uptime 5 23:13:49      Tue Jan 14 21:43:43 2014
+
+__ Key _________________________________________________________________
+Buffer used   241.00k of 384.00M  %Used:   0.06  	<-- Debería quedar por debajo del 80%
+  Current      71.84M            %Usage:  18.71
+Write hit      40.18%
+Read hit      100.00%  <----------------------------------- debería estar próximo al 99%
+
+__ Query Cache _________________________________________________________
+Memory usage   64.90M of  96.00M  %Used:  67.60
+Block Fragmnt  15.92%
+Hits            2.32M     4.5/s
+Inserts         4.21M     8.2/s
+Insrt:Prune    1.22:1     1.5/s
+Hit:Insert     0.55:1
+
+__ Table Locks _________________________________________________________
+Waited              1     0.0/s  %Total:   0.00		<--- Cómo evoluciona esto? Está por debajo del 10%? 
+Immediate       7.43M    14.4/s
+
+__ Tables ______________________________________________________________
+Open             1876 of 4096    %Cache:  45.80 	<--- Cómo evoluciona esto? Se llena?
+Opened          3.25M     6.3/s				<--- Cómo evoluciona? 
+
+__ Connections _________________________________________________________
+Max used          152 of  151      %Max: 100.66
+Total         100.45k     0.2/s
+
+¿Podría haber mejora en el siguiente si no usase tanto Disk? --> En tierra va mejor que en Luna. investigar
+__ Created Temp ________________________________________________________
+Disk table     57.56k     0.1/s				<--- Cómo evoluciona esto? Este valor debería ser el MENOR de los tres
+Table         252.70k     0.5/s    Size: 256.0M		<--- Cómo evoluciona esto? Supera el temp_table_size?
+File              550     0.0/s
+
+__ Threads _____________________________________________________________
+Running             1 of    3
+Cached              7 of    8      %Hit:  98.20	<----------- Cómo evoluciona esto? Si baja % malo --> Aumentar thread_cache_size (8)
+Created         1.81k     0.0/s
+Slow                0       0/s
+
+__ Aborted _____________________________________________________________
+Clients             0       0/s
+Connects        1.72k     0.0/s
+
+__ Bytes _______________________________________________________________
+Sent           17.41G   33.8k/s
+Received        1.79G    3.5k/s
+
+__ InnoDB Buffer Pool __________________________________________________
+Usage           2.22G of   2.50G  %Used:  88.95		<-- evitaremos que alcance el 100%:
+Read hit       99.97%
+Pages
+  Free         18.11k            %Total:  11.05
+  Data        140.46k                     85.73 %Drty:   0.02
+  Misc           5267                      3.21
+  Latched           0                      0.00
+Reads         476.98M   925.0/s
+  From file   137.10k     0.3/s            0.03
+  Ahead Rnd         0       0/s
+  Ahead Sql                 0/s
+Writes          8.31M    16.1/s
+Flushes       931.85k     1.8/s
+Wait Free           0       0/s
+
+__ InnoDB Lock _________________________________________________________
+Waits              77     0.0/s	<------------------ Que se mantenga en cero waits en 0 es lo mejor... pero si hay filas bloquedas ver...
+Current             0
+Time acquiring
+  Total          7436 ms		<-- Cuanto tiempo están bloquedas, media y tiempo máximo en bloqueo
+  Average          96 ms
+  Max             763 ms
+
+
+
+Se estudian estos cambios:
+
+innodb_log_buffer_size de 1M por defecto a 4M (para luna y tierra) <--------------------------- Hecho!
+innodb_flush_log_at_trx_commit de 1 a 2 (probar cero) <---------------------------------------- Hecho! Cuidado en Pruebas
+innodb_log_file_size = 128M (luna) 256M (tierra: o menos ya que no está solo para MySQL) < ---- OJO: hecho de momento sólo para 8M. 
+Puede cargarse la BD y para el servidor si se hace mal. Hacer esto:
+a.- http://www.mysqlperformanceblog.com/2008/11/21/how-to-calculate-a-good-innodb-log-file-size/ (Investigar el valor adecuado at peak time)
+b.- Para el servidor: service mysql stop
+c.- Mover (por respaldo) los ficheros ib_logfile0 y ib_logfile1 a un lugar seguro: 
+	mv /var/lib/mysql/ib_logfile* /home/tonisoto/Backup_Moodle/
+d.- Cambiar el valor innodb_log_file_size = 8M (o el que corresponda) en:
+	nano -w /etc/mysql/my.cnf
+e.- Reiniciamos MySQL:
+	service mysql restart ..... y ya debería reflejar el cambio
+
+***********************************************
+* Cambios introducidos en luna el 29-12-2013: *
+***********************************************
+innodb_flush_log_at_trx_commit = 2 <---------------------------------------- Hecho! Cuidado en Pruebas
+innodb_log_buffer_size = 4M
+#Añadí esto para generar un fichero error.log que podemos leer: tail -f /var/log/mysql/error.log
+log_error                 = /var/log/mysql/error.log
+#Activé las slow queries:
+# Here you can see queries with especially long duration
+log_slow_queries        = /var/log/mysql/mysql-slow.log
+long_query_time = 3
+innodb_log_file_size = 8M (Ver cómo se hace!!)
+
+
+*************************************************
+* Cambios introducidos en tierra el 02-01-2014: *
+**************************************************
+join_buffer_size (> 512.0K, or always use indexes with joins)
+table_cache (> 3072) <------------------------------------------------ Lo subo a 4096
+table_definition_cache=768 <------------------------------------------ Lo subo a 1024
+innodb_buffer_pool_size (>= 1021M) <---------------------------------- Lo subo a 2048M --> 2560M (Queda mucho margen de subida)
+innodb_flush_log_at_trx_commit = 1 <---------------------------------- Lo dejaré en 1 mientras no haga falta
+innodb_log_file_size = 8M <------------------------------------------- Se queda así pero se podría subir hasta el 25% de innodb_buffer_pool_size. 
+max_allowed_packet=16M <---------------------------------------------- Se queda así por que no hay razón para subirlo
+
+********************
+** 14-Enero-2014 ***
+********************
+root@tierra:/home/tonisoto# /root/toni/scripts/tuning-primer.sh reporta el 14-enero-2014:
+KEY BUFFER
+Current MyISAM index space = 272 K
+Current key_buffer_size = 384 M
+Key cache miss rate is 1 : 89858
+Key buffer free ratio = 81 %
+Your key_buffer_size seems to be too high.
+Perhaps you can use these resources elsewhere
+
+QUERY CACHE
+Query cache is enabled
+Current query_cache_size = 96 M
+Current query_cache_used = 65 M
+Current query_cache_limit = 4 M
+Current Query cache Memory fill ratio = 67.72 %
+Current query_cache_min_res_unit = 4 K
+MySQL won't cache query results that are larger than query_cache_limit in size
+
+TABLE CACHE
+Current table_open_cache = 4096 tables
+Current table_definition_cache = 1024 tables
+You have a total of 1663 tables
+You have 1876 open tables.
+The table_cache value seems to be fine
+You should probably increase your table_definition_cache value.
+
+mysqltuner el 14 de enero de 2014 (tierra)
+-------- Performance Metrics -------------------------------------------------
+[--] Up for: 5d 23h 5m 16s (9M q [18.520 qps], 100K conn, TX: 17B, RX: 1B)
+Variables to adjust:
+    max_connections (> 151) <---------------------------------------- esperaré un poco más ya que creo que se debe a los test de Santi
+    wait_timeout (< 28800)  <---------------------------------------- 1º vez que aparece: investigar
+    interactive_timeout (< 28800) <---------------------------------- 1º vez que aparece: investigar
+    query_cache_size (> 96M) <--------------------------------------- Creo que tocaría subirlo.¿tendrá que ver con query_cache_limit? Investigar
+    join_buffer_size (> 512.0K, or always use indexes with joins) <-- Esperaré a subir primero query_cache_size y ver qué pasa
+    table_cache (> 4096) <------------------------------------------- Ya la subí recientemente a 4096 desde 3072. Esperar un poco. Investigar
+
+*************************************************
+* Cambios introducidos en tierra el 14-01-2014: *
+**************************************************
+query_cache_size (> 96M) <------------------------------------------------ Lo subo a 128M
+
+Cambiar el valor query_cache_size = 96M (opor 128M) en:
+	nano -w /etc/mysql/my.cnf
+Reiniciamos MySQL:
+	service mysql restart
+
+Sobre query_cache hay un debate en http://www.mysqlperformanceblog.com/2012/09/05/write-contentions-on-the-query-cache/ sobre una posible
+ineficiencia. Se discute también en https://moodle.org/mod/forum/discuss.php?d=252671
+
+Sobre configuración de InnoDB leer el manual de MySQL. Sobre el las siguientes consideraciones:
+
+innodb_buffer_pool_size podría llegar según manual MySQL hasta 50-80% de la RAM total --> 8000M (eso sería para los 16GB de RAM de tierra)
+innodb_additional_mem_pool_size=1M [esta opción es nueva y habrá que tenerla en cuenta: Subirla a 450M?]
+innodb_log_file_size = 5M y debería ser el 25% de innodb_buffer_pool_size (250M) o de key buffer size (96M) <--- ojo con esto!
+
+Fijémonos
+**************************************************************************************************************************************************
+Podemos cambiar:
+innodb_flush_method está en blanco y ni idea qué hacer. Moodle y advisors recomiendan:  innodb_flush_method=O_DIRECT
+innodb_file_per_table está OFF pero en 5.6 por defecto viene ON ¿Qué hacer?
+
+key_buffer              = 384M ¿Aumentar a 1000M? ningún tuneador lo recomienda
+query_cache_size        = 96M (¿Aumentar a 128M?  
+thread_cache_size       = 8 (¿Aumentar a 64?  ningún tuneador lo recomienda
+sort_buffer_size	= 2M (está por defecto ¿Aumentar a 16M?  ningún tuneador lo recomienda
+read_buffer_size	= 131,072 (está por defecto ¿Aumentar a 32M?  ningún tuneador lo recomienda
+read_rnd_buffer_size	= 262,144 (está por defecto ¿Aumentar a 32M?  ningún tuneador lo recomienda
+innodb_additional_mem_pool_size	= 1,048,576 (está por defecto ¿Aumentar a 60M?  ningún tuneador lo recomienda
+
+Moodle org tiene esto:
+innodb_buffer_pool_size = 4G <-- Yo la voy a ir subiendo poco a poco ... probaré 1500M .. puedo seguir subiendo sin problema
+innodb_file_io_threads = 4 <--- Yo lo tengo igual por defecto
+innodb_thread_concurrency = 16 <--- Yo tengo 8 por defecto
+innodb_flush_log_at_trx_commit = 2 <--- Yo tengo 1 (safest) por defecto
+innodb_log_buffer_size = 4M <--- Yo tengo 1M  por defecto
+innodb_log_file_size = 256M <--- Yo tengo 5,2M por defecto
+innodb_flush_method=O_DIRECT <--- Yo lo tengo en blanco por defecto
+
+Montar el disco de datos con async y noatime (parece que es lo mismo que relatime.
+Usa hdparm -m16 -d1 para activar en los discos la lectura de sectores múltiples de una vez y aactivar el acceso a discos en modo DMA. Esto
+puede incrementar el tiempo de respuesta en un 5-50%
+Leer a Jeremy: http://jeremy.zawodny.com/mysql/mysql-optimization.html
+
+Lecturas de referencia:
+Innodb Performance Optimization Basics: http://www.mysqlperformanceblog.com/2007/11/01/innodb-performance-optimization-basics/
+http://dba.stackexchange.com/questions/4303/optimizing-innodb-default-settings/4325#4325
+
+En la última aconsejan ejecutar esta consulta SQL para averiguar el valor más apropiado para 'innodb_buffer_pool_size':
+SELECT CONCAT(ROUND(KBS/POWER(1024,IF(Power1024<0,0,
+IF(Power1024>3,0,Power1024)))+0.49999),SUBSTR(' KMG',IF(Power1024<0,0,
+IF(Power1024>3,0,Power1024))+1,1)) recommended_innodb_buffer_pool_size
+FROM (SELECT SUM(data_length+index_length) KBS FROM information_schema.tables
+WHERE engine='InnoDB') A,(SELECT 2 Power1024) B;
+
+27 octubre 2013 --> después de un reboot a las 4AM me da a las 11:18h --> 1453M
+07 diciembre 2013 --> Después de 34 días ininterrumpidos funcionando ---> 1545M  <- todo apunta a subirlo
+02 enero 2014 (tierra) --> 1ª vez que pruebo sin apenas tráfico --------> 1595M 
+Ver qué ocurre desde martes por la mañana (reinicio MySQL) a viernes por la noche (antes de que haga backup de nuevo)
+
+
+También se puede ejectura esta SQL:
+SELECT
+    BufferPoolUsed BytesUsed,
+    (BufferPoolUsed / power(1024,1)) UsedKB,
+    (BufferPoolUsed / power(1024,2)) UsedMB,
+    (BufferPoolUsed / power(1024,3)) UsedGB,
+    BufferPoolReserved BytesReserved,
+    (BufferPoolReserved / power(1024,1)) ReservedKB,
+    (BufferPoolReserved / power(1024,2)) ReservedMB,
+    (BufferPoolReserved / power(1024,3)) ReservedGB
+FROM
+    (
+        SELECT
+            (A.num * B.num) BufferPoolUsed,
+            (A.num * C.num) BufferPoolReserved
+        FROM
+            (SELECT variable_value num FROM information_schema.global_status
+            WHERE variable_name='Innodb_page_size') A,
+            (SELECT variable_value num FROM information_schema.global_status
+            WHERE variable_name='Innodb_buffer_pool_pages_data') B,
+            (SELECT variable_value num FROM information_schema.global_status
+            WHERE variable_name='Innodb_buffer_pool_pages_total') C
+    ) AA;
+
+Resultado em tierra 02-enero-2014:
+BytesUsed 	UsedKB 	UsedMB 	UsedGB 	BytesReserved 	ReservedKB 	ReservedMB 	ReservedGB
+232390656 	226944 	221.625 	0.2164306640625 	2147483648 	2097152 	2048 	2
+
+
+
+Datos de referencia de otras instalaciones:
+
+http://docs.moodle.org/22/en/Performance_recommendations
+http://docs.moodle.org/19/en/Performance
+https://moodle.org/mod/forum/discuss.php?d=237573#p1033429 (Post de Jason sobre Moodle database cluster, Galera, Load balancers,..)
+
+datos actuales:
+
+[mysqld]
+datadir=/var/lib/mysql
+socket=/var/lib/mysql/mysql.sock
+
+skip-innodb
+skip-locking
+
+old_passwords=1
+max_connections=400
+max_allowed_packet=8M
+thread_cache_size=8
+key_buffer=1024M
+table_cache=4000
+sort_buffer_size=2M
+read_buffer_size=2M
+read_rnd_buffer_size=8M
+thread_concurrency=8
+
+wait_timeout=15
+
+query_cache_type=1
+query_cache_limit=1M
+query_cache_size=100M
+
+log_error=/var/log/mysql/error.log
+long_query_time=3
+log_slow_queries=/var/log/mysql/slow_queries.log
+
+
+[mysqld_safe]
+err-log=/var/log/mysqld.log
+pid-file=/var/run/mysqld/mysqld.pid
+
+[mysql.server]
+user=mysql
+basedir=/var/lib
+
+nuestro servidor tiene: 2 procesadores doble nucleo Intel(R) Xeon(R) CPU E5450 @ 3.00GHz, ram 8 GB, Servidor Virtualizado Linux Red Had 5.2 Enterprice, 15000 usuarios registrados y hemos alcanzado las 300 conexiones concurrentes.
+
+-------------
+
+Let’s just look at the important bits.
+
+max_connections = 500 – You need to use mysqlreport tool(http://hackmysql.com/mysqlreport) to check how many current connections you have, and under very heavy load (2000 simultaneous users) You may rarely hit 400 concurrent connections to the database. This is because most connections only last for a few milliseconds.
+
+key_buffer = 384M - When tuning a MySQL server, key_buffer_size is very important. This number works well for me and with the mysqlreport script I rarely use 50% of the available memory.
+
+table_cache = 1800 – After key_buffer the next most important variable is your table cache. Again this is set for vBulletin so you may be able to significantly reduce this value depending on the number of tables in your database.
+
+wait_timeout = 7200 – This variable determines the timeout in seconds before mysql will dump a connection. If set to low you will likely receive mySQL server has gone away errors in your log, which in vBulletin’s case is quite common.
+
+max_allowed_packet = 16M – Again if set to low (the default is 8M) users will likely experience errors. 16M has always worked fine for my production environments.
+
+One more important tool we have already menctioned mysqlreport this is the best tool available for free you can check your mysql database server performance.
+
+Optimize Mysql Database response time
+
+The most important part for getting a system fast is of course the basic design. You also need to know what kinds of things your system will be doing, and what your bottlenecks are.
+
+The most common bottlenecks are:
+
+Disk seeks. It takes time for the disk to find a piece of data. With modern disks in 1999, the mean time for this is usually lower than 10ms, so we can in theory do about 100 seeks a second. This time improves slowly with new disks and is very hard to optimise for a single table. The way to optimise this is to spread the data on more than one disk.
+
+Disk reading/writing. When the disk is at the correct position we need to read the data. With modern disks in 1999, one disk delivers something like 10-20 MB. This is easier to optimise than seeks because you can read in parallel from multiple disks.
+
+CPU cycles. When we have the data in main memory (or if it already were there) we need to process it to get to our result. Having small tables compared to the memory is the most common limiting factor. But then, with small tables speed is usually not the problem.
+
+Memory bandwidth. When the CPU needs more data than can fit in the CPU cache the main memory bandwidth becomes a bottleneck. This is an uncommon bottleneck for most systems, but one should be aware of it.
+
+Some of the available options we will see now
+
+Activate Query Cache
+
+mysql> SHOW STATUS LIKE ‘Qcache%’;
+
+If you find any problems with  query cache memory was left. It was neccessary to increase the query cache size.
+
+To get an overview of your query_cache variables state, use the following syntax:
+
+mysql> SHOW VARIABLES LIKE ‘%query_cache%’;
+
+You need to have the query cache enabled in the first place (have_query_cache | YES) and make sure that query_cache_type is set to ON. This is usually activated by default on most linux distribution.
+
+Now, you can increase the query cache size (let say you want 50M) using:
+
+mysql> SET GLOBAL query_cache_size = 52428800;
+
+If you want this setting to be kept when restarting mysql, add:
+
+[mysqld]
+…
+…
+query_cache_size = 52428800;
+query_cache_type = 1
+
+-----------------------------------
+# Example MySQL config file for very large systems.
+#
+# This is for a large system with memory of 1G-2G where the system runs mainly
+# MySQL.
+#
+# You can copy this file to
+# /etc/my.cnf to set global options,
+# mysql-data-dir/my.cnf to set server-specific options (in this
+# installation this directory is /usr/local/mysql/data) or
+# ~/.my.cnf to set user-specific options.
+#
+# In this file, you can use all long options that a program supports.
+# If you want to know which options a program supports, run the program
+# with the "--help" option.
+
+# The following options will be passed to all MySQL clients
+[client]
+#password	= your_password
+port		= 3306
+socket		= /var/lib/mysql/mysql.sock
+
+# Here follows entries for some specific programs
+
+# The MySQL server
+[mysqld]
+
+max_connections = 300
+datadir=/database/mysql
+log-bin=/var/log/mysql/bin.log
+port		= 3306
+socket		= /var/lib/mysql/mysql.sock
+
+skip-locking
+key_buffer = 1024M
+max_allowed_packet = 1M
+table_cache = 512
+sort_buffer_size = 2M
+read_buffer_size = 2M
+read_rnd_buffer_size = 8M
+myisam_sort_buffer_size = 64M
+thread_cache_size = 8
+query_cache_size = 32M
+# Try number of CPU's*2 for thread_concurrency
+thread_concurrency = 4
+long_query_time=3
+log-slow-queries=/var/log/mysql/log-slow-queries.log
+
+# Don't listen on a TCP/IP port at all. This can be a security enhancement,
+# if all processes that need to connect to mysqld run on the same host.
+# All interaction with mysqld must be made via Unix sockets or named pipes.
+# Note that using this option without enabling named pipes on Windows
+# (via the "enable-named-pipe" option) will render mysqld useless!
+# 
+#skip-networking
+
+# Replication Master Server (default)
+# binary logging is required for replication
+log-bin=mysql-bin
+
+# required unique id between 1 and 2^32 - 1
+# defaults to 1 if master-host is not set
+# but will not function as a master if omitted
+server-id	= 1
+
+#mvagila. Aumentar parametro wait_timeoiut, para limitar el tiempo de espera de una conexion inactiva.
+wait_timeout=1800
+# Replication Slave (comment out master section to use this)
+#
+# To configure this host as a replication slave, you can choose between
+# two methods :
+#
+# 1) Use the CHANGE MASTER TO command (fully described in our manual) -
+#    the syntax is:
+#
+#    CHANGE MASTER TO MASTER_HOST=<host>, MASTER_PORT=<port>,
+#    MASTER_USER=<user>, MASTER_PASSWORD=<password> ;
+#
+#    where you replace <host>, <user>, <password> by quoted strings and
+#    <port> by the master's port number (3306 by default).
+#
+#    Example:
+#
+#    CHANGE MASTER TO MASTER_HOST='125.564.12.1', MASTER_PORT=3306,
+#    MASTER_USER='joe', MASTER_PASSWORD='secret';
+#
+# OR
+#
+# 2) Set the variables below. However, in case you choose this method, then
+#    start replication for the first time (even unsuccessfully, for example
+#    if you mistyped the password in master-password and the slave fails to
+#    connect), the slave will create a master.info file, and any later
+#    change in this file to the variables' values below will be ignored and
+#    overridden by the content of the master.info file, unless you shutdown
+#    the slave server, delete master.info and restart the slaver server.
+#    For that reason, you may want to leave the lines below untouched
+#    (commented) and instead use CHANGE MASTER TO (see above)
+#
+# required unique id between 2 and 2^32 - 1
+# (and different from the master)
+# defaults to 2 if master-host is set
+# but will not function as a slave if omitted
+#server-id       = 2
+#
+# The replication master for this slave - required
+#master-host     =   <hostname>
+#
+# The username the slave will use for authentication when connecting
+# to the master - required
+#master-user     =   <username>
+#
+# The password the slave will authenticate with when connecting to
+# the master - required
+#master-password =   <password>
+#
+# The port the master is listening on.
+# optional - defaults to 3306
+#master-port     =  <port>
+#Total fragmented tables: 1054
+# binary logging - not required for slaves, but recommended
+#log-bin=mysql-bin
+
+# Point the following paths to different dedicated disks
+#tmpdir		= /tmp/		
+#log-update 	= /path-to-dedicated-directory/hostname
+
+# Uncomment the following if you are using BDB tables
+#bdb_cache_size = 384M
+#bdb_max_lock = 100000
+
+# Uncomment the following if you are using InnoDB tables
+#innodb_data_home_dir = /usr/local/mysql/data/
+#innodb_data_file_path = ibdata1:2000M;ibdata2:10M:autoextend
+#innodb_log_group_home_dir = /usr/local/mysql/data/
+#innodb_log_arch_dir = /usr/local/mysql/data/
+# You can set .._buffer_pool_size up to 50 - 80 %
+# of RAM but beware of setting memory usage too high
+#innodb_buffer_pool_size = 384M
+#innodb_additional_mem_pool_size = 20M
+# Set .._log_file_size to 25 % of buffer pool size
+#innodb_log_file_size = 100M
+#innodb_log_buffer_size = 8M
+#innodb_flush_log_at_trx_commit = 1
+#innodb_lock_wait_timeout = 50
+
+[mysqldump]
+quick
+max_allowed_packet = 16M
+
+[mysql]
+no-auto-rehash
+# Remove the next comment character if you are not familiar with SQL
+#safe-updates
+
+[isamchk]
+key_buffer = 256M
+sort_buffer_size = 256M
+read_buffer = 2M
+write_buffer = 2M
+
+[myisamchk]
+key_buffer = 256M
+sort_buffer_size = 256M
+read_buffer = 2M
+write_buffer = 2M
+
+[mysqlhotcopy]
+interactive-timeout
+
